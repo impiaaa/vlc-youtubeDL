@@ -23,35 +23,31 @@ function parse()
 
   local file = assert(io.popen('youtube-dl -j --flat-playlist '..url, 'r'))  --run youtube-dl in json mode
   local tracks = {}
-  while true do
-    local output = file:read('*l')
-    
+  for output in file:lines() do
     if not output then
-      break
+      return nil
     end
 
     local json = JSON.decode(output) -- decode the json-output from youtube-dl
     
     if not json then
-      break
+      return nil
     end
     
     local outurl = json.url
     if not outurl then
       -- choose best
+      outurl = json.formats[#json.formats].url
+      -- prefer streaming formats
       for key, format in pairs(json.formats) do
-        outurl = format.url
+        if format.manifest_url and format.vcodec and format.vcodec ~= "none" and format.acodec and format.acodec ~= "none" then
+          outurl = format.manifest_url
+        end
       end
       -- prefer audio and video
       for key, format in pairs(json.formats) do
-        if format.vcodec and format.acodec then
+        if format.vcodec and format.vcodec ~= "none" and format.acodec and format.acodec ~= "none" then
           outurl = format.url
-        end
-      end
-      -- prefer streaming formats
-      for key, format in pairs(json.formats) do
-        if format.manifest_url then
-          outurl = format.manifest_url
         end
       end
     end
@@ -122,7 +118,10 @@ function parse()
       table.insert(tracks, item)
     end
   end
-  file:close()
-  return tracks
+  if file:close() then
+    return tracks
+  else
+    return nil
+  end
 end
 
